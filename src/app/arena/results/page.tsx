@@ -10,10 +10,8 @@ import {
   Lightbulb,
   CheckCircle2,
   XCircle,
-  ArrowRight,
   ChevronDown,
   ChevronUp,
-  RotateCcw,
   Clock,
   BarChart3,
   Users,
@@ -22,8 +20,7 @@ import {
   Home,
 } from 'lucide-react';
 import { useArenaStore } from '@/lib/store';
-import type { ArenaResult, EvaluationScores, LeaderboardEntry, TimelineEntry } from '@/types/arena';
-import { ARENA_PHASE_LABELS } from '@/types/arena';
+import type { LeaderboardEntry, TimelineEntry } from '@/types/arena';
 
 // ---- Score Bar Component ----
 function ScoreBar({ label, value, color, delay = 0 }: { label: string; value: number; color: string; delay?: number }) {
@@ -266,7 +263,7 @@ function VotingSummary({ events }: { events: { agentId: string; agentName: strin
 // ---- Main Results Page ----
 export default function ResultsPage() {
   const router = useRouter();
-  const { result, config, events, reset, agentStates } = useArenaStore();
+  const { result, config, events, reset } = useArenaStore();
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'leaderboard' | 'voting'>('overview');
 
   useEffect(() => {

@@ -59,6 +59,8 @@ export const ARENA_PHASE_DESCRIPTIONS: Record<ArenaPhase, string> = {
   results: 'Final recommendation and analysis',
 };
 
+export type LLMProviderType = 'mock' | 'openai' | 'gemini' | 'claude' | 'ollama';
+
 export interface ArenaConfig {
   challenge: string;
   mode: ArenaMode;
@@ -67,6 +69,10 @@ export interface ArenaConfig {
   constraints?: string;
   teamCount?: number; // competitive mode
   timeLimit?: number; // seconds
+  provider?: LLMProviderType;
+  model?: string;
+  apiKey?: string;
+  baseUrl?: string;
 }
 
 export interface Arena {

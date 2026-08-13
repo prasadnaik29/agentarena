@@ -62,8 +62,35 @@ export class MockAIProvider implements AIProvider {
     const role = this.detectRole(systemPrompt);
     // Detect phase from last message
     const phase = this.detectPhase(lastMessage);
+    // Extract challenge topic
+    const topic = this.extractTopic(systemPrompt, options.messages);
     
-    return this.getResponse(role, phase, lastMessage);
+    return this.getResponse(role, phase, topic);
+  }
+
+  private extractTopic(systemPrompt: string, messages: Array<{ role: string; content: string }>): string {
+    const fullText = [systemPrompt, ...messages.map(m => m.content)].join('\n');
+    
+    // Look for explicit CHALLENGE: tag
+    const challengeMatch = fullText.match(/CHALLENGE:\s*([^\n.]+)/i);
+    if (challengeMatch && challengeMatch[1].trim().length > 5) {
+      return challengeMatch[1].trim();
+    }
+    
+    // Look for user question or prompt line
+    for (const msg of messages) {
+      if (msg.role === 'user' && msg.content.length > 10) {
+        const cleaned = msg.content
+          .replace(/^(run|start|evaluate|solve|help me with|how to)\s+/i, '')
+          .split(/[\n.?]/)[0]
+          .trim();
+        if (cleaned.length > 5 && cleaned.length < 80) {
+          return cleaned;
+        }
+      }
+    }
+
+    return 'the target challenge';
   }
 
   private detectRole(systemPrompt: string): string {
@@ -91,120 +118,118 @@ export class MockAIProvider implements AIProvider {
     return 'general';
   }
 
-  private getResponse(role: string, phase: string, context: string): string {
-    const responses: Record<string, Record<string, string[]>> = {
+  private getResponse(role: string, phase: string, topic: string): string {
+    // Return structured JSON for judge/vote
+    if (role === 'judge' && phase === 'judge') {
+      return JSON.stringify({
+        feasibility: 82,
+        evidence: 85,
+        originality: 78,
+        costEfficiency: 76,
+        risk: 72,
+        impact: 88,
+        consistency: 81,
+        overall: 80,
+      });
+    }
+
+    if (role === 'judge' && phase === 'vote') {
+      return JSON.stringify({
+        vote: 'approve',
+        reason: `The proposal provides a clear, actionable roadmap for "${topic}" with realistic risk mitigations and solid operational viability.`,
+      });
+    }
+
+    if (role === 'judge' && phase === 'synthesize') {
+      return `RECOMMENDATION FOR "${topic.toUpperCase()}": PROCEED WITH PHASED EXECUTION. Confidence: 84%.
+
+After multi-agent synthesis, the optimal approach is a 3-stage rollout:
+1. Phase 1 (Months 1-3): Initiate a targeted pilot to validate core assumptions and user adoption.
+2. Phase 2 (Months 4-6): Refine operational workflows based on pilot metrics and scale capacity by 2.5x.
+3. Phase 3 (Months 7-12): Full deployment with dedicated monitoring of cash flow and risk triggers.
+
+Key Mitigations: Maintain a 15% contingency reserve, conduct bi-weekly audit reviews, and set explicit go/no-go gates at each phase transition.`;
+    }
+
+    // Role-specific, topic-tailored human-like statements
+    const domainTemplates: Record<string, Record<string, string[]>> = {
       researcher: {
         decompose: [
-          'I\'ve identified three key subproblems: (1) Market demand validation, (2) Competitive landscape analysis, (3) Target demographic profiling. Each requires independent investigation before we can form a coherent strategy.',
+          `To solve "${topic}", we must analyze three sub-problems: (1) Core user demand and key adoption friction, (2) Operational & technical prerequisites, and (3) Competitive/market alternatives.`,
         ],
         investigate: [
-          'Based on my research, the addressable market shows strong growth indicators. Key finding: The target segment has a 34% year-over-year growth rate, though market penetration remains below 12%. This suggests significant opportunity but also validates the need for careful market entry strategy.',
-          'My analysis reveals three critical market assumptions that need validation: customer willingness to pay, expected adoption timeline, and channel effectiveness. Current data suggests the first assumption holds, but the latter two carry significant uncertainty.',
+          `Research on "${topic}" shows strong potential demand. Early indicators suggest a 25-35% efficiency upside if implemented with clear user onboarding.`,
+          `Analysis reveals two critical assumptions for "${topic}": user willingness to adopt new workflows and initial implementation speed.`,
         ],
         propose: [
-          'Based on evidence gathered, I propose a phased market entry approach: Phase 1 (months 1-3) focuses on a pilot in a single metro city to validate core assumptions. Phase 2 (months 4-6) expands to 3 tier-1 cities with validated pricing. Phase 3 (months 7-12) scales based on proven unit economics.',
+          `For "${topic}", I propose an evidence-backed phased rollout: start with a focused pilot, validate user retention, then scale across secondary segments.`,
         ],
         debate: [
-          'I disagree with the aggressive timeline proposed. My research indicates similar market entries required 18-24 months for meaningful traction, not 12. The evidence supports a more conservative ramp-up.',
+          `I urge caution regarding overly rapid expansion for "${topic}". Historical data shows that rushing deployment without pilot validation leads to a 30% drop in user retention.`,
         ],
         critique: [
-          'The revenue projections lack supporting evidence for the assumed 15% conversion rate. Industry benchmarks suggest 3-8% is more realistic for this segment. This fundamentally changes the financial model.',
-        ],
-        general: [
-          'Analyzing the available data on this challenge. Initial findings suggest both opportunity and risk that need careful examination by the team.',
+          `The current assumptions for "${topic}" lack empirical benchmark validation. We need clear metrics before committing full resource allocation.`,
         ],
       },
       strategist: {
         decompose: [
-          'From a strategic perspective, this challenge breaks into: (1) Market positioning, (2) Go-to-market strategy, (3) Competitive differentiation, (4) Resource allocation. The positioning decision cascades into all other strategic choices.',
+          `Strategic breakdown for "${topic}": (1) Value proposition positioning, (2) Go-to-market execution, (3) Long-term defensibility & scale.`,
         ],
         propose: [
-          'I recommend a differentiation strategy focused on underserved segments. Specifically: target the mid-market with a premium-quality, competitively-priced offering. Key differentiator: superior user experience and localized features. Distribution through digital-first channels with strategic offline partnerships.',
+          `Recommended strategy for "${topic}": Target high-intent early adopters first to establish social proof and refine the core experience before broader outreach.`,
         ],
         debate: [
-          'While the conservative approach reduces risk, it also reduces first-mover advantage. I propose a balanced strategy: aggressive digital marketing spend in month 1-2 (40% of budget) to establish brand awareness, then shift to retention and organic growth. The cost of waiting exceeds the cost of early investment.',
-        ],
-        general: [
-          'Developing strategic framework for this challenge. Evaluating multiple approaches against the given constraints and objectives.',
+          `While a conservative approach limits exposure, first-mover execution on "${topic}" is essential. Capturing early momentum outweighs minor initial setup friction.`,
         ],
       },
       finance: {
         decompose: [
-          'Financial analysis requires: (1) Cost structure breakdown, (2) Revenue model validation, (3) Unit economics analysis, (4) Cash flow projection, (5) Break-even analysis. Budget constraint is the binding factor here.',
+          `Financial breakdown for "${topic}": (1) Upfront capital expenditure, (2) Unit economics & operating expenses, (3) Cash flow trajectory to break-even.`,
         ],
         investigate: [
-          'Financial deep-dive reveals: Operating costs will consume 65% of the budget in the first 6 months. Customer acquisition cost (CAC) is estimated at ₹850-1,200 per customer. With the current pricing model, break-even requires 2,400 paying customers — achievable by month 8 under optimistic scenarios, month 14 under realistic ones.',
+          `Financial assessment for "${topic}": Initial capital requirements will be front-loaded (approx 50-60% in early months). Projected break-even is achievable within 8 to 12 months under steady adoption.`,
         ],
         propose: [
-          'Financial projection: With ₹10L budget, allocate 30% to development, 40% to marketing/acquisition, 15% to operations, 15% as reserve. Expected revenue trajectory: ₹0 (month 1-2), ₹1.5L/month (month 3-6), ₹4L/month (month 7-12). Break-even at month 10. Total first-year revenue: ₹22L. Net position: +₹12L.',
+          `Budget structure for "${topic}": Allocate 40% to core execution & delivery, 30% to user acquisition, 15% to infrastructure, and 15% as a risk reserve.`,
         ],
         debate: [
-          'The marketing budget allocation of 40% is insufficient given current CAC estimates. My calculations show we need either: (a) 55% marketing spend, reducing development budget, or (b) a lower-cost acquisition channel. The current plan has a 23% budget overrun risk by month 6.',
-        ],
-        critique: [
-          'The revenue projection assumes linear growth, but market data shows S-curve adoption. The first 3 months will likely generate 60% less revenue than projected. This creates a ₹3.2L cash flow gap that isn\'t addressed in the current plan.',
-        ],
-        general: [
-          'Calculating financial feasibility. Initial numbers suggest the plan is viable but requires careful budget management and realistic growth assumptions.',
+          `The proposed budget for "${topic}" needs a larger contingency buffer. Unforeseen operational delays could create a 15-20% cash flow gap if unaddressed.`,
         ],
       },
       risk: {
         decompose: [
-          'Risk analysis covers: (1) Market risk — demand may not materialize, (2) Financial risk — cash flow timing, (3) Operational risk — execution challenges, (4) Competitive risk — incumbent response, (5) Regulatory risk. Each requires separate assessment.',
+          `Risk evaluation for "${topic}": (1) Execution risk during initial setup, (2) Cash flow timing, (3) User churn & resistance, (4) External market dependencies.`,
         ],
         investigate: [
-          'Risk assessment findings: HIGH RISK — Cash flow timing mismatch between marketing spend and revenue generation. MEDIUM RISK — Competitive response within 6 months of launch. MEDIUM RISK — Key personnel dependency. LOW RISK — Regulatory changes. The cash flow risk is the most critical and could derail the entire venture.',
+          `Primary risk for "${topic}": Operational friction during early adoption. We recommend setting explicit SLA thresholds and automated performance triggers.`,
         ],
         propose: [
-          'Risk mitigation framework: (1) Maintain 15% budget reserve for cash flow gaps, (2) Sign 3 pilot customers before full launch to validate demand, (3) Establish contingency plan for competitive response, (4) Cross-train team members to reduce key-person dependency. Accept regulatory risk as low-probability.',
+          `Risk mitigation plan for "${topic}": (1) Maintain 15% cash reserve, (2) Enforce stage-gate reviews at month 3 and 6, (3) Establish secondary operational partners.`,
         ],
         debate: [
-          'The proposed strategy underestimates competitive risk. Two established players have launched similar products in the last 6 months. Without a clear differentiation strategy, we risk being outspent 10:1. I recommend allocating specific budget for competitive intelligence and rapid pivoting capability.',
-        ],
-        general: [
-          'Evaluating risk landscape for this challenge. Multiple risk vectors identified that require team discussion.',
+          `We are underestimating external competitive response to "${topic}". We should build modular features that allow rapid pivoting if market conditions shift.`,
         ],
       },
       critic: {
         decompose: [
-          'Before decomposing, I want to challenge the problem statement itself. Are we asking the right question? The challenge assumes launch is a binary decision, but there may be intermediate options (soft launch, partnership, licensing) that deserve evaluation.',
+          `Challenging the core premise of "${topic}": Are we addressing the root cause or merely treating a symptom? We must ensure simplicity in design.`,
         ],
         critique: [
-          'Three critical weaknesses I\'ve identified: (1) The revenue model assumes a conversion rate 3x the industry average — unsupported by evidence. (2) The strategy ignores existing competitors\' likely response to market entry. (3) The financial plan has no contingency for delayed product-market fit. Each of these could independently cause failure.',
+          `Key vulnerability in the plan for "${topic}": Onboarding complexity could cause initial friction. We need to simplify the user journey before scaling.`,
         ],
         debate: [
-          'Both the optimistic and conservative proposals share a blind spot: neither adequately addresses customer retention after acquisition. Historical data shows 40-60% churn in the first 3 months for similar products. The financial model needs to account for this or the unit economics completely fall apart.',
-        ],
-        general: [
-          'Reviewing all proposals for logical consistency and unsupported assumptions. Several weaknesses detected that need addressing.',
-        ],
-      },
-      judge: {
-        judge: [
-          '{"feasibility": 78, "evidence": 82, "originality": 71, "costEfficiency": 74, "risk": 65, "impact": 83, "consistency": 76, "overall": 76}',
-        ],
-        synthesize: [
-          'After weighing all agent inputs, my recommendation is: PROCEED WITH MODIFICATIONS. Confidence: 74%. The core opportunity is validated by market evidence, but the execution plan requires three critical adjustments: (1) Reduce initial scope to a single-city pilot before expansion, (2) Increase marketing budget allocation to 50% with a CAC-focused strategy, (3) Build in 3 explicit go/no-go decision points at months 3, 6, and 9. Key risks: cash flow timing and competitive response. These are manageable with the proposed mitigations but require active monitoring.',
-        ],
-        vote: [
-          '{"vote": "approve", "reason": "The proposal addresses the core market opportunity and, with the recommended modifications for risk mitigation, presents a viable path forward. The remaining risks are manageable and the potential upside justifies proceeding."}',
-        ],
-        general: [
-          'Evaluating all proposals against the challenge criteria. Synthesizing agent inputs into a balanced recommendation.',
-        ],
-      },
-      general: {
-        general: [
-          'Analyzing the challenge from my area of expertise. I\'ll provide specific, actionable insights based on the available information.',
+          `The proposal for "${topic}" assumes smooth execution across all teams, but cross-functional handoffs are where 40% of project delays occur.`,
         ],
       },
     };
 
-    const roleResponses = responses[role] || responses.general;
-    const phaseResponses = roleResponses[phase] || roleResponses.general || responses.general.general;
-    const idx = Math.floor(Math.random() * phaseResponses.length);
-    
-    return phaseResponses[idx];
+    const roleMap = domainTemplates[role] || domainTemplates.researcher;
+    const phaseList = roleMap[phase] || roleMap.investigate || roleMap.decompose || [
+      `Analyzing "${topic}" from a ${role} perspective to provide actionable, evidence-based recommendations.`,
+    ];
+
+    const idx = Math.floor(Math.random() * phaseList.length);
+    return phaseList[idx];
   }
 
   private delay(ms: number): Promise<void> {

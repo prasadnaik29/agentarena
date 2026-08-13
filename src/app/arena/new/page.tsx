@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowRight, Zap, Users, Swords, Sparkles, Plus, Minus } from 'lucide-react';
+import { ArrowRight, Zap, Users, Swords, Sparkles, Plus, Minus, Cpu, Key, Globe } from 'lucide-react';
 import { useArenaStore } from '@/lib/store';
-import { SAMPLE_CHALLENGES } from '@/types/arena';
+import { SAMPLE_CHALLENGES, type LLMProviderType } from '@/types/arena';
 
 function ArenaCreatorForm() {
   const router = useRouter();
@@ -17,7 +17,45 @@ function ArenaCreatorForm() {
   const [agentCount, setAgentCount] = useState(6);
   const [domain, setDomain] = useState('');
   const [constraints, setConstraints] = useState('');
+  const [provider, setProvider] = useState<LLMProviderType>('mock');
+  const [model, setModel] = useState<string>('gpt-4o-mini');
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const modelOptions: Record<LLMProviderType, Array<{ id: string; label: string }>> = {
+    mock: [
+      { id: 'mock-dynamic', label: 'Dynamic Multi-Agent Simulator (Free / Offline)' },
+    ],
+    openai: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini (Fast & Cost-Effective)' },
+      { id: 'gpt-4o', label: 'GPT-4o (High Reasoning)' },
+      { id: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+      { id: 'o3-mini', label: 'o3-Mini (Reasoning Benchmark)' },
+    ],
+    gemini: [
+      { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Fast)' },
+      { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Deep Context)' },
+    ],
+    claude: [
+      { id: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet' },
+      { id: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
+    ],
+    ollama: [
+      { id: 'llama3', label: 'Llama 3 (Local)' },
+      { id: 'mistral', label: 'Mistral 7B (Local)' },
+      { id: 'codellama', label: 'CodeLlama (Local)' },
+      { id: 'phi3', label: 'Phi-3 (Local Small)' },
+    ],
+  };
+
+  const handleProviderChange = (p: LLMProviderType) => {
+    setProvider(p);
+    const defaults = modelOptions[p];
+    if (defaults && defaults[0]) {
+      setModel(defaults[0].id);
+    }
+  };
 
   const handleBuild = async () => {
     if (challenge.trim().length < 10) return;
@@ -34,6 +72,10 @@ function ArenaCreatorForm() {
           domain: domain || undefined,
           constraints: constraints || undefined,
           teamCount: mode === 'competitive' ? 3 : undefined,
+          provider,
+          model: model || undefined,
+          apiKey: apiKey.trim() || undefined,
+          baseUrl: baseUrl.trim() || undefined,
         }),
       });
 
@@ -189,6 +231,118 @@ function ArenaCreatorForm() {
               className="w-full bg-[var(--surface)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--muted)]"
             />
           </div>
+        </motion.div>
+
+        {/* AI Engine & Model Selection */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.32 }}
+          className="card mb-8 space-y-4 border-[var(--border-bright)]"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-[var(--accent)]" />
+              AI Model & Provider Configuration
+            </h3>
+            {provider === 'mock' && (
+              <span className="badge badge-accent text-[10px]">Free Mode (No API Key Required)</span>
+            )}
+          </div>
+
+          {/* Provider Selector Badges */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--muted)] mb-2">Select Provider</label>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {(
+                [
+                  { id: 'mock', name: 'Free Simulator', icon: '⚡' },
+                  { id: 'openai', name: 'OpenAI', icon: '🟢' },
+                  { id: 'gemini', name: 'Gemini', icon: '🔵' },
+                  { id: 'claude', name: 'Claude', icon: '🟣' },
+                  { id: 'ollama', name: 'Ollama', icon: '🦙' },
+                ] as const
+              ).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => handleProviderChange(p.id)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
+                    provider === p.id
+                      ? 'bg-[var(--accent-dim)] border-[var(--accent)] text-[var(--accent)]'
+                      : 'bg-[var(--surface)] border-[var(--border-color)] text-[var(--muted)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  <span>{p.icon}</span>
+                  <span>{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Model Selection Dropdown */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="modelSelect" className="block text-xs font-medium text-[var(--muted)] mb-1">
+                Model Family / Version
+              </label>
+              <select
+                id="modelSelect"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full bg-[var(--surface)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[var(--accent)] transition-colors"
+              >
+                {(modelOptions[provider] || []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Custom Base URL (for Ollama, Agent Router, OpenRouter, or custom proxy) */}
+            {provider !== 'mock' && (
+              <div>
+                <label htmlFor="baseUrlInput" className="block text-xs font-medium text-[var(--muted)] mb-1 flex items-center gap-1">
+                  <Globe className="w-3 h-3 text-[var(--accent)]" />
+                  Base URL / API Gateway (optional)
+                </label>
+                <input
+                  id="baseUrlInput"
+                  type="url"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder={provider === 'ollama' ? 'http://localhost:11434/v1' : 'e.g. https://agentrouter.org/v1'}
+                  className="w-full bg-[var(--surface)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--muted)]"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* API Key Input */}
+          {provider !== 'mock' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="pt-2 border-t border-[var(--border-color)]"
+            >
+              <label htmlFor="apiKeyInput" className="block text-xs font-medium text-[var(--muted)] mb-1 flex items-center gap-1">
+                <Key className="w-3 h-3 text-[var(--warning)]" />
+                Custom API Key (optional — falls back to server env)
+              </label>
+              <input
+                id="apiKeyInput"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={`Paste your API Key (sk-...)`}
+                className="w-full bg-[var(--surface)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-[var(--accent)] transition-colors placeholder:text-[var(--muted)]"
+              />
+              <p className="text-[10px] text-[var(--muted)] mt-1">
+                🔒 Key is passed securely for this session only and never logged.
+              </p>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Build Button */}

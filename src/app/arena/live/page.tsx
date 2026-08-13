@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -11,26 +11,25 @@ import {
   type Edge,
   Position,
   Handle,
-  useNodesState,
-  useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
   Activity,
-  Clock,
   MessageSquare,
-  ChevronRight,
   X,
-  Wrench,
   Target,
   Shield,
   CheckCircle2,
   XCircle,
   ArrowRight,
+  Pause,
+  Play,
+  Square,
+  AlertOctagon,
 } from 'lucide-react';
 import { useArenaStore, type AgentUIState } from '@/lib/store';
 import type { ArenaEvent } from '@/types/events';
-import type { ArenaResult, ArenaPhase } from '@/types/arena';
+import type { ArenaPhase } from '@/types/arena';
 import {
   ARENA_PHASE_ORDER,
   ARENA_PHASE_LABELS,
@@ -377,7 +376,27 @@ export default function LiveArenaPage() {
     handleEvent, setResult, setError, selectAgent, selectedAgentId,
   } = useArenaStore();
 
-  const [hasStarted, setHasStarted] = useState(false);
+  const hasStartedRef = useRef(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isAborted, setIsAborted] = useState(false);
+  const isPausedRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const togglePause = () => {
+    const next = !isPaused;
+    setIsPaused(next);
+    isPausedRef.current = next;
+  };
+
+  const handleAbort = () => {
+    if (confirm('Are you sure you want to abort this live arena execution?')) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setIsAborted(true);
+      setError('Arena run aborted by user.');
+    }
+  };
 
   // Build React Flow nodes and edges from agent states
   const { flowNodes, flowEdges } = useMemo(() => {
@@ -431,13 +450,15 @@ export default function LiveArenaPage() {
 
   // Start the arena run
   useEffect(() => {
-    if (!config || !agents.length || hasStarted) return;
+    if (!config || !agents.length || hasStartedRef.current) return;
     if (status !== 'running') {
       router.push('/arena/new');
       return;
     }
 
-    setHasStarted(true);
+    hasStartedRef.current = true;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const startArena = async () => {
       try {
@@ -445,6 +466,7 @@ export default function LiveArenaPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ config, agents }),
+          signal: controller.signal,
         });
 
         if (!response.ok || !response.body) {
@@ -456,14 +478,22 @@ export default function LiveArenaPage() {
         let buffer = '';
 
         while (true) {
+          if (controller.signal.aborted) break;
+
+          // Pause loop
+          while (isPausedRef.current && !controller.signal.aborted) {
+            await new Promise(r => setTimeout(r, 200));
+          }
+
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done || controller.signal.aborted) break;
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
+            if (controller.signal.aborted) break;
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
@@ -479,12 +509,16 @@ export default function LiveArenaPage() {
           }
         }
       } catch (error) {
-        setError((error as Error).message);
+        if ((error as Error).name === 'AbortError' || controller.signal.aborted) {
+          setIsAborted(true);
+        } else {
+          setError((error as Error).message);
+        }
       }
     };
 
     startArena();
-  }, [config, agents, hasStarted, status, router, handleEvent, setResult, setError]);
+  }, [config, agents, status, router, handleEvent, setResult, setError]);
 
   // Navigate to results when complete
   useEffect(() => {
@@ -506,8 +540,43 @@ export default function LiveArenaPage() {
         <span className="text-[10px] text-[var(--muted)] font-mono">
           {config.mode.toUpperCase()}
         </span>
+
+        {/* Live Controls: Pause / Resume & Abort */}
+        {status === 'running' && !result && !isAborted && (
+          <div className="flex items-center gap-2 border-l border-r border-[var(--border-color)] px-3 py-1">
+            <button
+              onClick={togglePause}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all ${
+                isPaused
+                  ? 'bg-[var(--warning)]/20 text-[var(--warning)] border border-[var(--warning)]/40 animate-pulse'
+                  : 'bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border-bright)] hover:bg-[var(--surface-hover)]'
+              }`}
+              title={isPaused ? 'Resume execution' : 'Pause execution'}
+            >
+              {isPaused ? <Play className="w-3 h-3 fill-current" /> : <Pause className="w-3 h-3 fill-current" />}
+              <span>{isPaused ? 'Resume' : 'Pause'}</span>
+            </button>
+
+            <button
+              onClick={handleAbort}
+              className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[var(--danger)]/15 text-[var(--danger)] border border-[var(--danger)]/30 hover:bg-[var(--danger)]/25 transition-colors"
+              title="Abort arena run"
+            >
+              <Square className="w-3 h-3 fill-current" />
+              <span>Abort</span>
+            </button>
+          </div>
+        )}
+
+        {isAborted && (
+          <span className="badge border border-[var(--warning)] text-[var(--warning)] flex items-center gap-1">
+            <AlertOctagon className="w-3 h-3" />
+            Run Aborted
+          </span>
+        )}
+
         <div className="flex-1" />
-        {currentPhase && (
+        {currentPhase && !isAborted && (
           <span className="badge badge-accent animate-pulse-glow">
             {ARENA_PHASE_LABELS[currentPhase]}
           </span>

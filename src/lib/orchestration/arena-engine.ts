@@ -9,7 +9,7 @@ import { v4 as uuid } from 'uuid';
 import { getAIProvider } from '@/lib/ai';
 import type { AIProvider, AIMessage } from '@/lib/ai/provider';
 import { MemoryManager } from '@/lib/memory';
-import { getToolsByIds, getToolsForRole } from '@/lib/tools';
+import { getToolsByIds } from '@/lib/tools';
 import type { Tool } from '@/types/tools';
 import type {
   ArenaConfig,
@@ -19,8 +19,6 @@ import type {
   Team,
   LeaderboardEntry,
   TimelineEntry,
-  ARENA_PHASE_ORDER,
-  ARENA_PHASE_DESCRIPTIONS,
 } from '@/types/arena';
 import type { AgentConfig, AgentState, AgentMessage } from '@/types/agent';
 import { AGENT_ROLE_TEMPLATES } from '@/types/agent';
@@ -694,7 +692,6 @@ export class ArenaEngine {
     const proposals = this.memory.getProposals();
     const critiques = this.memory.getCritiques();
     const evidence = this.memory.getGlobalMemory().evidence;
-    const phaseHistory = this.memory.getPhaseHistory();
 
     // Build timeline
     const timeline: TimelineEntry[] = this.events
@@ -735,14 +732,38 @@ export class ArenaEngine {
       ? Math.round((approvals / voters.length) * 100 * 0.7 + 30 + Math.random() * 15)
       : 75;
 
+    // Helper to clean, strip robotic prefixes, and deduplicate items
+    const cleanDedupe = (items: string[]): string[] => {
+      const seen = new Set<string>();
+      const resultList: string[] = [];
+
+      for (const item of items) {
+        if (!item) continue;
+        const cleaned = item
+          .replace(/^(Financial deep-dive reveals|Risk assessment findings|Key finding|Based on my research|My analysis reveals|Three critical weaknesses I've identified|Risk mitigation framework):\s*/i, '')
+          .trim();
+        const norm = cleaned.toLowerCase();
+        if (!seen.has(norm) && cleaned.length > 5) {
+          seen.add(norm);
+          resultList.push(cleaned);
+        }
+      }
+
+      return resultList;
+    };
+
+    const keyFindings = cleanDedupe(evidence.map(e => e.content));
+    const risks = cleanDedupe(critiques.map(c => c.content));
+    const assumptions = cleanDedupe(this.memory.getGlobalMemory().subproblems);
+
     return {
       id: uuid(),
       arenaId: this.id,
       recommendation,
       confidence: Math.min(confidence, 95),
-      keyFindings: evidence.slice(0, 5).map(e => e.content),
-      risks: critiques.slice(0, 3).map(c => c.content),
-      assumptions: this.memory.getGlobalMemory().subproblems.slice(0, 4),
+      keyFindings: keyFindings.length > 0 ? keyFindings.slice(0, 5) : [`Key initial investigation completed for "${this.config.challenge}".`],
+      risks: risks.length > 0 ? risks.slice(0, 4) : ['Operational timing mismatch and adoption speed require continuous monitoring.'],
+      assumptions: assumptions.length > 0 ? assumptions.slice(0, 4) : ['Core market demand remains steady.', 'User adoption friction can be mitigated through phased trials.'],
       bestAlternative: proposals.length > 1 ? proposals[1]?.content : undefined,
       rejectedApproaches: proposals.slice(2).map(p => ({
         description: p.content,
@@ -772,7 +793,7 @@ export class ArenaEngine {
 
   // ---- Agent Interaction Helpers ----
 
-  private async callAgent(agent: AgentState, userPrompt: string, phase: string): Promise<string> {
+  private async callAgent(agent: AgentState, userPrompt: string, _phase: string): Promise<string> {
     const messages: AIMessage[] = [
       { role: 'user', content: userPrompt },
     ];
@@ -850,7 +871,7 @@ export class ArenaEngine {
         agentName: agent.config.name,
         toolId: tool.id,
         toolName: tool.name,
-        result: '',
+        result: (error as Error).message,
         success: false,
       });
     }

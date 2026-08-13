@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { ArenaEngine } from '@/lib/orchestration';
+import { createAIProvider } from '@/lib/ai';
 import type { ArenaConfig } from '@/types/arena';
 import type { AgentConfig } from '@/types/agent';
 import type { ArenaEvent } from '@/types/events';
@@ -36,10 +37,18 @@ export async function POST(request: NextRequest) {
         };
 
         try {
+          const provider = createAIProvider({
+            provider: config.provider,
+            model: config.model,
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl,
+          });
+
           const engine = new ArenaEngine({
             config,
             agents,
             onEvent: sendEvent,
+            provider,
           });
 
           const result = await engine.run();

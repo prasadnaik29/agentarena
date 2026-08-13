@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Zap, Users, Brain, Trophy, Sparkles } from 'lucide-react';
+import { ArrowRight, Zap, Users, Trophy, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { SAMPLE_CHALLENGES } from '@/types/arena';
 

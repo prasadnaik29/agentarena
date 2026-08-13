@@ -9,7 +9,7 @@ import type { ArenaConfig } from '@/types/arena';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { challenge, mode, agentCount, domain, constraints, teamCount } = body;
+    const { challenge, mode, agentCount, domain, constraints, teamCount, provider, model, apiKey, baseUrl } = body;
 
     if (!challenge || typeof challenge !== 'string' || challenge.trim().length < 10) {
       return NextResponse.json(
@@ -25,6 +25,10 @@ export async function POST(request: NextRequest) {
       domain: domain || undefined,
       constraints: constraints || undefined,
       teamCount: mode === 'competitive' ? (teamCount || 3) : undefined,
+      provider: provider || 'mock',
+      model: model || undefined,
+      apiKey: apiKey || undefined,
+      baseUrl: baseUrl || undefined,
     };
 
     // Auto-build the agent team

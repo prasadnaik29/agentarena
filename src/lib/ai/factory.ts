@@ -6,24 +6,59 @@ import type { AIProvider } from './provider';
 import { OpenAIProvider } from './openai';
 import { MockAIProvider } from './mock-provider';
 
-export type ProviderType = 'openai' | 'mock';
+import type { LLMProviderType } from '@/types/arena';
 
-export function createAIProvider(type?: ProviderType): AIProvider {
-  // Auto-detect: use OpenAI if API key is available, otherwise mock
-  const providerType = type || (process.env.OPENAI_API_KEY ? 'openai' : 'mock');
+export interface CreateAIProviderOptions {
+  provider?: LLMProviderType;
+  model?: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export function createAIProvider(options?: CreateAIProviderOptions | LLMProviderType): AIProvider {
+  const opts: CreateAIProviderOptions = typeof options === 'string' ? { provider: options } : options || {};
+  const providerType = opts.provider || (process.env.OPENAI_API_KEY ? 'openai' : 'mock');
+
+  const apiKey = opts.apiKey || process.env.OPENAI_API_KEY;
+  const baseUrl = opts.baseUrl || process.env.OPENAI_BASE_URL;
+  const model = opts.model || process.env.OPENAI_MODEL;
 
   switch (providerType) {
-    case 'openai':
-      if (!process.env.OPENAI_API_KEY) {
-        console.warn('[AI Provider] No OPENAI_API_KEY found. Falling back to mock provider.');
-        return new MockAIProvider();
+    case 'gemini':
+      const gKey = opts.apiKey || process.env.GEMINI_API_KEY || apiKey;
+      const gUrl = opts.baseUrl || process.env.GEMINI_BASE_URL || baseUrl || 'https://generativelanguage.googleapis.com/v1beta/openai/';
+      const gModel = opts.model || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+      if (gKey) {
+        return new OpenAIProvider({
+          apiKey: gKey,
+          defaultModel: gModel,
+          baseUrl: gUrl,
+        });
       }
-      return new OpenAIProvider();
-    case 'mock':
-      console.info('[AI Provider] Using mock provider for development.');
       return new MockAIProvider();
+
+    case 'openai':
+      return new OpenAIProvider({
+        apiKey,
+        defaultModel: model,
+        baseUrl,
+      });
+
+    case 'claude':
+    case 'ollama':
+      // Connect using custom endpoint / API key or fallback to OpenAI/Mock
+      if (apiKey || baseUrl) {
+        return new OpenAIProvider({
+          apiKey,
+          defaultModel: model,
+          baseUrl,
+        });
+      }
+      return new MockAIProvider();
+
+    case 'mock':
     default:
-      throw new Error(`Unknown AI provider type: ${providerType}`);
+      return new MockAIProvider();
   }
 }
 

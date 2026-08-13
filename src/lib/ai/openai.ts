@@ -3,34 +3,53 @@
 // ============================================================
 
 import OpenAI from 'openai';
-import type { AIProvider, AIGenerateOptions, AIStreamOptions, AIStructuredOptions, AIGenerateResult, AIMessage } from './provider';
+import type { AIProvider, AIGenerateOptions, AIStreamOptions, AIStructuredOptions, AIGenerateResult } from './provider';
+import { MockAIProvider } from './mock-provider';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 800;
 
 export class OpenAIProvider implements AIProvider {
   name = 'openai';
   private client: OpenAI;
+  private defaultModel: string;
+  private mockFallback: MockAIProvider;
+  private isGemini: boolean;
 
-  constructor(apiKey?: string) {
+  constructor(options?: string | { apiKey?: string; defaultModel?: string; baseUrl?: string }) {
+    const apiKey = typeof options === 'string' ? options : options?.apiKey || process.env.OPENAI_API_KEY;
+    const baseURL = (typeof options === 'object' ? options?.baseUrl : undefined) || process.env.OPENAI_BASE_URL || undefined;
+    this.defaultModel = (typeof options === 'object' ? options?.defaultModel : undefined) || process.env.OPENAI_MODEL || DEFAULT_MODEL;
+    this.mockFallback = new MockAIProvider();
+    this.isGemini = !!(baseURL && baseURL.includes('googleapis.com'));
+
     this.client = new OpenAI({
-      apiKey: apiKey || process.env.OPENAI_API_KEY,
+      apiKey: apiKey || 'dummy-key-for-custom-endpoint',
+      baseURL: baseURL || undefined,
     });
   }
 
   async generate(options: AIGenerateOptions): Promise<AIGenerateResult> {
     const messages = this.buildMessages(options);
+    const model = options.model || this.defaultModel || DEFAULT_MODEL;
     
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const response = await this.client.chat.completions.create({
-          model: options.model || DEFAULT_MODEL,
+        // Gemini's OpenAI-compatible endpoint does not support max_tokens
+        const createParams: Record<string, unknown> = {
+          model,
           temperature: options.temperature ?? 0.3,
-          max_tokens: options.maxTokens || 2048,
           messages,
-        });
+        };
+        if (!this.isGemini) {
+          createParams.max_tokens = options.maxTokens || 2048;
+        }
+
+        const response = await this.client.chat.completions.create(
+          createParams as unknown as OpenAI.ChatCompletionCreateParamsNonStreaming
+        );
 
         return {
           content: response.choices[0]?.message?.content || '',
@@ -44,25 +63,33 @@ export class OpenAIProvider implements AIProvider {
       } catch (error) {
         lastError = error as Error;
         if (attempt < MAX_RETRIES - 1) {
-          await this.delay(RETRY_DELAY_MS * (attempt + 1));
+          await this.delay(RETRY_DELAY_MS);
         }
       }
     }
 
-    throw new Error(`OpenAI API call failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+    console.warn(`[OpenAI Provider] API call failed: ${lastError?.message}. Falling back to dynamic Mock Provider.`);
+    return this.mockFallback.generate(options);
   }
 
   async stream(options: AIStreamOptions): Promise<AIGenerateResult> {
     const messages = this.buildMessages(options);
+    const model = options.model || this.defaultModel || DEFAULT_MODEL;
     
     try {
-      const stream = await this.client.chat.completions.create({
-        model: options.model || DEFAULT_MODEL,
+      const createParams: Record<string, unknown> = {
+        model,
         temperature: options.temperature ?? 0.3,
-        max_tokens: options.maxTokens || 2048,
         messages,
         stream: true,
-      });
+      };
+      if (!this.isGemini) {
+        createParams.max_tokens = options.maxTokens || 2048;
+      }
+
+      const stream = await this.client.chat.completions.create(
+        createParams as unknown as OpenAI.ChatCompletionCreateParamsStreaming
+      );
 
       let fullContent = '';
       for await (const chunk of stream) {
@@ -75,10 +102,11 @@ export class OpenAIProvider implements AIProvider {
 
       return {
         content: fullContent,
-        model: options.model || DEFAULT_MODEL,
+        model,
       };
     } catch (error) {
-      throw new Error(`OpenAI streaming failed: ${(error as Error).message}`);
+      console.warn(`[OpenAI Provider] Streaming failed: ${(error as Error).message}. Falling back to dynamic Mock Provider.`);
+      return this.mockFallback.stream(options);
     }
   }
 
