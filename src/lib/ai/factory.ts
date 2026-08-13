@@ -17,7 +17,7 @@ export interface CreateAIProviderOptions {
 
 export function createAIProvider(options?: CreateAIProviderOptions | LLMProviderType): AIProvider {
   const opts: CreateAIProviderOptions = typeof options === 'string' ? { provider: options } : options || {};
-  const providerType = opts.provider || (process.env.OPENAI_API_KEY ? 'openai' : 'mock');
+  const providerType = opts.provider || (process.env.GEMINI_API_KEY ? 'gemini' : process.env.OPENAI_API_KEY ? 'openai' : 'mock');
 
   const apiKey = opts.apiKey || process.env.OPENAI_API_KEY;
   const baseUrl = opts.baseUrl || process.env.OPENAI_BASE_URL;
@@ -27,7 +27,7 @@ export function createAIProvider(options?: CreateAIProviderOptions | LLMProvider
     case 'gemini':
       const gKey = opts.apiKey || process.env.GEMINI_API_KEY || apiKey;
       const gUrl = opts.baseUrl || process.env.GEMINI_BASE_URL || baseUrl || 'https://generativelanguage.googleapis.com/v1beta/openai/';
-      const gModel = opts.model || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+      const gModel = opts.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
       if (gKey) {
         return new OpenAIProvider({
           apiKey: gKey,

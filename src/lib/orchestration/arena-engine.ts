@@ -817,10 +817,11 @@ export class ArenaEngine {
         agentId: agent.id,
         agentName: agent.config.name,
         error: (error as Error).message,
-        recoverable: true,
+        recoverable: !(error as Error).message?.includes('401') && !(error as Error).message?.includes('403') && !(error as Error).message?.includes('Invalid API'),
       });
 
-      return `[${agent.config.name} encountered an error and provided a limited response] Based on available information, the challenge warrants careful consideration of multiple factors.`;
+      // Surface real error — don't hide it with a fake response
+      return `[ERROR: ${agent.config.name} failed — ${(error as Error).message}]`;
     }
   }
 
@@ -988,9 +989,10 @@ function clampScore(score: number): number {
 }
 
 // ---- Auto-build Team Logic ----
-export function autoBuildTeam(challenge: string, mode: 'collaborative' | 'competitive', agentCount?: number): AgentConfig[] {
+export function autoBuildTeam(challenge: string, mode: 'collaborative' | 'competitive', agentCount?: number, modelId?: string): AgentConfig[] {
   const count = agentCount || (mode === 'competitive' ? 9 : 6);
   const templates = [...AGENT_ROLE_TEMPLATES];
+  const agentModel = modelId || 'gpt-4o-mini';
   
   if (mode === 'collaborative') {
     // For collaborative: one of each key role
@@ -1003,7 +1005,7 @@ export function autoBuildTeam(challenge: string, mode: 'collaborative' | 'compet
       objectives: t.objectives,
       personality: t.personality,
       toolIds: t.defaultTools,
-      model: 'gpt-4o-mini',
+      model: agentModel,
       temperature: t.defaultTemperature,
       avatar: t.avatar,
       color: t.color,
@@ -1027,7 +1029,7 @@ export function autoBuildTeam(challenge: string, mode: 'collaborative' | 'compet
             objectives: template.objectives,
             personality: template.personality,
             toolIds: template.defaultTools,
-            model: 'gpt-4o-mini',
+            model: agentModel,
             temperature: template.defaultTemperature,
             avatar: template.avatar,
             color: template.color,
@@ -1043,13 +1045,13 @@ export function autoBuildTeam(challenge: string, mode: 'collaborative' | 'compet
       {
         id: uuid(), name: critic.name, role: critic.role, description: critic.description,
         systemPrompt: critic.systemPrompt, objectives: critic.objectives, personality: critic.personality,
-        toolIds: critic.defaultTools, model: 'gpt-4o-mini', temperature: critic.defaultTemperature,
+        toolIds: critic.defaultTools, model: agentModel, temperature: critic.defaultTemperature,
         avatar: critic.avatar, color: critic.color,
       },
       {
         id: uuid(), name: judge.name, role: judge.role, description: judge.description,
         systemPrompt: judge.systemPrompt, objectives: judge.objectives, personality: judge.personality,
-        toolIds: judge.defaultTools, model: 'gpt-4o-mini', temperature: judge.defaultTemperature,
+        toolIds: judge.defaultTools, model: agentModel, temperature: judge.defaultTemperature,
         avatar: judge.avatar, color: judge.color,
       },
     );
@@ -1057,3 +1059,4 @@ export function autoBuildTeam(challenge: string, mode: 'collaborative' | 'compet
     return agents;
   }
 }
+

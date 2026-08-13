@@ -68,8 +68,8 @@ export class OpenAIProvider implements AIProvider {
       }
     }
 
-    console.warn(`[OpenAI Provider] API call failed: ${lastError?.message}. Falling back to dynamic Mock Provider.`);
-    return this.mockFallback.generate(options);
+    // API call failed after retries — throw the real error, don't hide it
+    throw new Error(`AI provider error (${lastError?.message || 'unknown'}). Check your API key and try again.`);
   }
 
   async stream(options: AIStreamOptions): Promise<AIGenerateResult> {
@@ -105,8 +105,8 @@ export class OpenAIProvider implements AIProvider {
         model,
       };
     } catch (error) {
-      console.warn(`[OpenAI Provider] Streaming failed: ${(error as Error).message}. Falling back to dynamic Mock Provider.`);
-      return this.mockFallback.stream(options);
+      // Streaming failed — throw the real error, don't hide it
+      throw new Error(`AI streaming error (${(error as Error).message}). Check your API key and try again.`);
     }
   }
 

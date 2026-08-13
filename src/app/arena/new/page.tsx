@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowRight, Zap, Users, Swords, Sparkles, Plus, Minus, Cpu, Key, Globe } from 'lucide-react';
@@ -18,10 +18,24 @@ function ArenaCreatorForm() {
   const [domain, setDomain] = useState('');
   const [constraints, setConstraints] = useState('');
   const [provider, setProvider] = useState<LLMProviderType>('mock');
-  const [model, setModel] = useState<string>('gpt-4o-mini');
+  const [model, setModel] = useState<string>('mock-dynamic');
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Auto-detect configured provider from server env vars
+  useEffect(() => {
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.defaultProvider && data.defaultProvider !== 'mock') {
+          setProvider(data.defaultProvider as LLMProviderType);
+          setModel(data.defaultModel || 'gemini-2.5-flash');
+        }
+      })
+      .catch(() => { /* stay on mock if config endpoint fails */ });
+  }, []);
 
   const modelOptions: Record<LLMProviderType, Array<{ id: string; label: string }>> = {
     mock: [
@@ -34,8 +48,9 @@ function ArenaCreatorForm() {
       { id: 'o3-mini', label: 'o3-Mini (Reasoning Benchmark)' },
     ],
     gemini: [
-      { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Fast)' },
-      { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Deep Context)' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Fast & Smart)' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Deep Reasoning)' },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Legacy)' },
     ],
     claude: [
       { id: 'claude-3-5-sonnet-20240620', label: 'Claude 3.5 Sonnet' },
@@ -61,6 +76,7 @@ function ArenaCreatorForm() {
     if (challenge.trim().length < 10) return;
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/arena', {
         method: 'POST',
@@ -85,8 +101,10 @@ function ArenaCreatorForm() {
       setConfig(data.config);
       setAgents(data.agents);
       router.push('/arena/configure');
-    } catch (error) {
-      console.error('Failed to build arena:', error);
+    } catch (err) {
+      const message = (err as Error).message || 'Failed to build arena';
+      setError(message);
+      console.error('Failed to build arena:', err);
     } finally {
       setLoading(false);
     }
@@ -344,6 +362,18 @@ function ArenaCreatorForm() {
             </motion.div>
           )}
         </motion.div>
+
+        {/* Error Display */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 p-4 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-sm"
+          >
+            <p className="font-semibold mb-1">❌ Arena Build Failed</p>
+            <p className="text-xs opacity-90">{error}</p>
+          </motion.div>
+        )}
 
         {/* Build Button */}
         <motion.div
