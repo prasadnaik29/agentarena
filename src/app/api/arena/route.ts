@@ -5,12 +5,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { autoBuildTeam } from '@/lib/orchestration';
 import { createAIProvider } from '@/lib/ai';
-import type { ArenaConfig } from '@/types/arena';
+import type { ArenaConfig, LLMProviderType } from '@/types/arena';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { challenge, mode, agentCount, domain, constraints, teamCount, provider, model, apiKey, baseUrl } = body;
+    const {
+      challenge,
+      mode,
+      agentCount,
+      domain,
+      constraints,
+      teamCount,
+      provider = 'mock',
+      model,
+      apiKey,
+      baseUrl,
+    } = body;
 
     if (!challenge || typeof challenge !== 'string' || challenge.trim().length < 10) {
       return NextResponse.json(
@@ -19,9 +30,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve the actual provider (auto-detect from env if not specified)
-    const resolvedProvider = provider || (process.env.GEMINI_API_KEY ? 'gemini' : process.env.OPENAI_API_KEY ? 'openai' : 'mock');
-    const resolvedModel = model || (resolvedProvider === 'gemini' ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : resolvedProvider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : 'mock-dynamic');
+    const resolvedProvider: LLMProviderType = provider || 'mock';
+
+    // Model resolution defaults per provider
+    const defaultModels: Record<LLMProviderType, string> = {
+      mock: 'mock-dynamic',
+      openai: 'gpt-4o-mini',
+      gemini: 'gemini-2.5-flash',
+      claude: 'claude-3-5-sonnet-20241022',
+      groq: 'llama-3.3-70b-versatile',
+      openrouter: 'anthropic/claude-3.5-sonnet',
+      deepseek: 'deepseek-chat',
+      ollama: 'llama3',
+    };
+
+    const resolvedModel = model || defaultModels[resolvedProvider] || 'gpt-4o-mini';
 
     // Validate the API key by making a lightweight test call (skip for mock)
     if (resolvedProvider !== 'mock') {
@@ -29,20 +52,22 @@ export async function POST(request: NextRequest) {
         const testProvider = createAIProvider({
           provider: resolvedProvider,
           model: resolvedModel,
-          apiKey: apiKey || undefined,
-          baseUrl: baseUrl || undefined,
+          apiKey: apiKey ? apiKey.trim() : undefined,
+          baseUrl: baseUrl ? baseUrl.trim() : undefined,
         });
 
-        // Quick validation — a minimal generate call to confirm the key works
+        // Quick validation call
         await testProvider.generate({
           model: resolvedModel,
-          messages: [{ role: 'user', content: 'Respond with OK' }],
+          messages: [{ role: 'user', content: 'Ping: reply with OK' }],
           maxTokens: 5,
         });
       } catch (error) {
-        const errMsg = (error as Error).message || 'Unknown error';
+        const errMsg = (error as Error).message || 'Invalid credentials';
         return NextResponse.json(
-          { error: `API key validation failed for ${resolvedProvider}: ${errMsg}. Please check your API key and try again.` },
+          {
+            error: `API key validation failed for ${resolvedProvider.toUpperCase()}: ${errMsg}. Please verify your API key, or switch to the Free Simulator.`,
+          },
           { status: 401 }
         );
       }
@@ -52,13 +77,13 @@ export async function POST(request: NextRequest) {
       challenge: challenge.trim(),
       mode: mode === 'competitive' ? 'competitive' : 'collaborative',
       agentCount: agentCount || undefined,
-      domain: domain || undefined,
-      constraints: constraints || undefined,
+      domain: domain ? domain.trim() : undefined,
+      constraints: constraints ? constraints.trim() : undefined,
       teamCount: mode === 'competitive' ? (teamCount || 3) : undefined,
       provider: resolvedProvider,
       model: resolvedModel,
-      apiKey: apiKey || undefined,
-      baseUrl: baseUrl || undefined,
+      apiKey: apiKey ? apiKey.trim() : undefined,
+      baseUrl: baseUrl ? baseUrl.trim() : undefined,
     };
 
     // Auto-build the agent team with the correct model
@@ -71,7 +96,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Arena API] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to create arena.' },
+      { error: `Failed to create arena: ${(error as Error).message}` },
       { status: 500 }
     );
   }

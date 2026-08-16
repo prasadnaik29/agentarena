@@ -4,8 +4,8 @@
 
 import type { AIProvider } from './provider';
 import { OpenAIProvider } from './openai';
+import { AnthropicProvider } from './anthropic';
 import { MockAIProvider } from './mock-provider';
-
 import type { LLMProviderType } from '@/types/arena';
 
 export interface CreateAIProviderOptions {
@@ -17,17 +17,28 @@ export interface CreateAIProviderOptions {
 
 export function createAIProvider(options?: CreateAIProviderOptions | LLMProviderType): AIProvider {
   const opts: CreateAIProviderOptions = typeof options === 'string' ? { provider: options } : options || {};
-  const providerType = opts.provider || (process.env.GEMINI_API_KEY ? 'gemini' : process.env.OPENAI_API_KEY ? 'openai' : 'mock');
+  
+  // Resolve provider type (explicit option > env auto-detection > fallback to mock)
+  const providerType: LLMProviderType = opts.provider || (
+    opts.apiKey ? 'openai' :
+    process.env.GEMINI_API_KEY ? 'gemini' :
+    process.env.OPENAI_API_KEY ? 'openai' :
+    process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY ? 'claude' :
+    process.env.GROQ_API_KEY ? 'groq' :
+    process.env.OPENROUTER_API_KEY ? 'openrouter' :
+    process.env.DEEPSEEK_API_KEY ? 'deepseek' :
+    'mock'
+  );
 
-  const apiKey = opts.apiKey || process.env.OPENAI_API_KEY;
-  const baseUrl = opts.baseUrl || process.env.OPENAI_BASE_URL;
-  const model = opts.model || process.env.OPENAI_MODEL;
+  const customKey = opts.apiKey?.trim();
+  const customBaseUrl = opts.baseUrl?.trim();
+  const customModel = opts.model?.trim();
 
   switch (providerType) {
-    case 'gemini':
-      const gKey = opts.apiKey || process.env.GEMINI_API_KEY || apiKey;
-      const gUrl = opts.baseUrl || process.env.GEMINI_BASE_URL || baseUrl || 'https://generativelanguage.googleapis.com/v1beta/openai/';
-      const gModel = opts.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    case 'gemini': {
+      const gKey = customKey || process.env.GEMINI_API_KEY;
+      const gUrl = customBaseUrl || process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/';
+      const gModel = customModel || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
       if (gKey) {
         return new OpenAIProvider({
           apiKey: gKey,
@@ -36,25 +47,87 @@ export function createAIProvider(options?: CreateAIProviderOptions | LLMProvider
         });
       }
       return new MockAIProvider();
+    }
 
-    case 'openai':
-      return new OpenAIProvider({
-        apiKey,
-        defaultModel: model,
-        baseUrl,
-      });
-
-    case 'claude':
-    case 'ollama':
-      // Connect using custom endpoint / API key or fallback to OpenAI/Mock
-      if (apiKey || baseUrl) {
+    case 'openai': {
+      const oKey = customKey || process.env.OPENAI_API_KEY;
+      const oUrl = customBaseUrl || process.env.OPENAI_BASE_URL;
+      const oModel = customModel || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+      if (oKey || oUrl) {
         return new OpenAIProvider({
-          apiKey,
-          defaultModel: model,
-          baseUrl,
+          apiKey: oKey,
+          defaultModel: oModel,
+          baseUrl: oUrl,
         });
       }
       return new MockAIProvider();
+    }
+
+    case 'claude': {
+      const cKey = customKey || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+      const cUrl = customBaseUrl || process.env.ANTHROPIC_BASE_URL;
+      const cModel = customModel || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+      if (cKey) {
+        return new AnthropicProvider({
+          apiKey: cKey,
+          defaultModel: cModel,
+          baseUrl: cUrl,
+        });
+      }
+      return new MockAIProvider();
+    }
+
+    case 'groq': {
+      const groqKey = customKey || process.env.GROQ_API_KEY;
+      const groqUrl = customBaseUrl || process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+      const groqModel = customModel || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+      if (groqKey || customBaseUrl) {
+        return new OpenAIProvider({
+          apiKey: groqKey,
+          defaultModel: groqModel,
+          baseUrl: groqUrl,
+        });
+      }
+      return new MockAIProvider();
+    }
+
+    case 'openrouter': {
+      const orKey = customKey || process.env.OPENROUTER_API_KEY;
+      const orUrl = customBaseUrl || process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+      const orModel = customModel || process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-sonnet';
+      if (orKey || customBaseUrl) {
+        return new OpenAIProvider({
+          apiKey: orKey,
+          defaultModel: orModel,
+          baseUrl: orUrl,
+        });
+      }
+      return new MockAIProvider();
+    }
+
+    case 'deepseek': {
+      const dsKey = customKey || process.env.DEEPSEEK_API_KEY;
+      const dsUrl = customBaseUrl || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1';
+      const dsModel = customModel || process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+      if (dsKey || customBaseUrl) {
+        return new OpenAIProvider({
+          apiKey: dsKey,
+          defaultModel: dsModel,
+          baseUrl: dsUrl,
+        });
+      }
+      return new MockAIProvider();
+    }
+
+    case 'ollama': {
+      const olUrl = customBaseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
+      const olModel = customModel || process.env.OLLAMA_MODEL || 'llama3';
+      return new OpenAIProvider({
+        apiKey: customKey || 'ollama',
+        defaultModel: olModel,
+        baseUrl: olUrl,
+      });
+    }
 
     case 'mock':
     default:

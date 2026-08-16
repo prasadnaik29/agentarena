@@ -19,6 +19,8 @@ export const metadata: Metadata = {
   keywords: ["AI", "agents", "arena", "collaboration", "debate", "decision-making"],
 };
 
+import { Header } from "@/components/Header";
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -27,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]" suppressHydrationWarning>
+        <Header />
         {children}
       </body>
     </html>

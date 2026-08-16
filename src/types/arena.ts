@@ -59,7 +59,7 @@ export const ARENA_PHASE_DESCRIPTIONS: Record<ArenaPhase, string> = {
   results: 'Final recommendation and analysis',
 };
 
-export type LLMProviderType = 'mock' | 'openai' | 'gemini' | 'claude' | 'ollama';
+export type LLMProviderType = 'mock' | 'openai' | 'gemini' | 'claude' | 'groq' | 'openrouter' | 'deepseek' | 'ollama';
 
 export interface ArenaConfig {
   challenge: string;
