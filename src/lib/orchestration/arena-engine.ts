@@ -732,20 +732,26 @@ export class ArenaEngine {
       ? Math.round((approvals / voters.length) * 100 * 0.7 + 30 + Math.random() * 15)
       : 75;
 
-    // Helper to clean, strip robotic prefixes, and deduplicate items
+    // Helper to clean, strip robotic prefixes, chunk composite sections, and deduplicate items
     const cleanDedupe = (items: string[]): string[] => {
       const seen = new Set<string>();
       const resultList: string[] = [];
 
       for (const item of items) {
         if (!item) continue;
-        const cleaned = item
-          .replace(/^(Financial deep-dive reveals|Risk assessment findings|Key finding|Based on my research|My analysis reveals|Three critical weaknesses I've identified|Risk mitigation framework):\s*/i, '')
-          .trim();
-        const norm = cleaned.toLowerCase();
-        if (!seen.has(norm) && cleaned.length > 5) {
-          seen.add(norm);
-          resultList.push(cleaned);
+
+        // Split multi-section findings by major subproblem/topic headings
+        const subSections = item.split(/(?=(?:^|\n)\s*(?:\*{2,3}|#{2,4})\s*(?:Market|Pricing|Financial|Cost|Revenue|Supply|Vehicle|Model|Regulatory|Policy|Incentive|Business|Operational|Subproblem|Actionable|Phase|Key Finding))/i);
+
+        for (const sub of subSections) {
+          const cleaned = sub
+            .replace(/^(Financial deep-dive reveals|Risk assessment findings|Key finding|Based on my research|My analysis reveals|Three critical weaknesses I've identified|Risk mitigation framework):\s*/i, '')
+            .trim();
+          const norm = cleaned.toLowerCase().substring(0, 80);
+          if (!seen.has(norm) && cleaned.length > 15) {
+            seen.add(norm);
+            resultList.push(cleaned);
+          }
         }
       }
 
