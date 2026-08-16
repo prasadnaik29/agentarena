@@ -725,12 +725,30 @@ export class ArenaEngine {
         .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
     }
 
-    // Calculate confidence from votes
-    const voters = Array.from(this.agents.values()).filter(a => a.vote);
-    const approvals = voters.filter(a => a.vote === 'approve').length;
-    const confidence = voters.length > 0
-      ? Math.round((approvals / voters.length) * 100 * 0.7 + 30 + Math.random() * 15)
-      : 75;
+    // Calculate dynamic confidence score
+    // 1. Try to extract explicit confidence assigned by the Decision Agent in synthesis
+    let confidence: number | null = null;
+    const confMatch = recommendation.match(/confidence(?:\s*level)?[:\s]+(\d{1,3})%?/i);
+    if (confMatch && confMatch[1]) {
+      const parsed = parseInt(confMatch[1], 10);
+      if (!isNaN(parsed) && parsed >= 10 && parsed <= 100) {
+        confidence = parsed;
+      }
+    }
+
+    // 2. If not explicitly in recommendation text, compute from voting ratio & risk balance
+    if (confidence === null) {
+      const voters = Array.from(this.agents.values()).filter(a => a.vote);
+      const approvals = voters.filter(a => a.vote === 'approve').length;
+      const approvalRatio = voters.length > 0 ? approvals / voters.length : 0.8;
+      
+      // Critique severity penalty (more critiques = lower confidence)
+      const critiquePenalty = Math.min(critiques.length * 3, 15);
+      
+      // Base confidence weighted between 55% and 92%
+      const baseConf = Math.round(50 + (approvalRatio * 35) - critiquePenalty + (Math.random() * 8));
+      confidence = Math.max(45, Math.min(94, baseConf));
+    }
 
     // Helper to clean, strip robotic prefixes, chunk composite sections, and deduplicate items
     const cleanDedupe = (items: string[]): string[] => {
@@ -766,7 +784,7 @@ export class ArenaEngine {
       id: uuid(),
       arenaId: this.id,
       recommendation,
-      confidence: Math.min(confidence, 95),
+      confidence,
       keyFindings: keyFindings.length > 0 ? keyFindings.slice(0, 5) : [`Key initial investigation completed for "${this.config.challenge}".`],
       risks: risks.length > 0 ? risks.slice(0, 4) : ['Operational timing mismatch and adoption speed require continuous monitoring.'],
       assumptions: assumptions.length > 0 ? assumptions.slice(0, 4) : ['Core market demand remains steady.', 'User adoption friction can be mitigated through phased trials.'],
